@@ -5,7 +5,7 @@ COPY . .
 RUN go mod tidy && go build -o app ./cmd/main.go
 
 # Final image
-FROM gcr.io/distroless/base-debian11
+FROM debian:bullseye-slim
 WORKDIR /app
 COPY --from=builder /app/app .
 COPY views/ ./views/
