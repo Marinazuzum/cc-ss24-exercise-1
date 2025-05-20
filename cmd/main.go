@@ -185,8 +185,12 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// TODO: make sure to pass the proper username, password, and port
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	// Use MONGODB_URI from environment if set, otherwise default to localhost
+	uri := os.Getenv("MONGODB_URI")
+	if uri == "" {
+		uri = "mongodb://localhost:27017"
+	}
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 
 	// This is another way to specify the call of a function. You can define inline
 	// functions (or anonymous functions, similar to the behavior in Python)
@@ -227,13 +231,43 @@ func main() {
 		return c.Render(200, "book-table", books)
 	})
 
-	e.GET("/authors", func(c echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
-	})
+e.GET("/authors", func(c echo.Context) error {
+	// Fetch all books and extract unique authors
+	books := findAllBooks(coll)
+	authorSet := make(map[string]struct{})
+	for _, book := range books {
+		if author, ok := book["BookAuthor"].(string); ok {
+			authorSet[author] = struct{}{}
+		}
+	}
+	var authors []string
+	for author := range authorSet {
+		authors = append(authors, author)
+	}
+	data := struct {
+		Authors []string
+	}{Authors: authors}
+	return c.Render(http.StatusOK, "authors.html", data)
+})
 
-	e.GET("/years", func(c echo.Context) error {
-		return c.NoContent(http.StatusNoContent)
-	})
+e.GET("/years", func(c echo.Context) error {
+	// Fetch all books and extract unique years
+	books := findAllBooks(coll)
+	yearSet := make(map[string]struct{})
+	for _, book := range books {
+		if year, ok := book["BookYear"].(string); ok {
+			yearSet[year] = struct{}{}
+		}
+	}
+	var years []string
+	for year := range yearSet {
+		years = append(years, year)
+	}
+	data := struct {
+		Years []string
+	}{Years: years}
+	return c.Render(http.StatusOK, "years.html", data)
+})
 
 	e.GET("/search", func(c echo.Context) error {
 		return c.Render(200, "search-bar", nil)
@@ -243,15 +277,109 @@ func main() {
 		return c.NoContent(http.StatusNoContent)
 	})
 
-	// You will have to expand on the allowed methods for the path
-	// `/api/route`, following the common standard.
-	// A very good documentation is found here:
-	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Methods
-	// It specifies the expected returned codes for each type of request
-	// method.
+
+	// GET /api/books (already implemented above)
 	e.GET("/api/books", func(c echo.Context) error {
 		books := findAllBooks(coll)
 		return c.JSON(http.StatusOK, books)
+	})
+
+	// POST /api/books
+	e.POST("/api/books", func(c echo.Context) error {
+		var req struct {
+			ID       string `json:"id"`
+			Title    string `json:"title"`
+			Author   string `json:"author"`
+			Pages    string `json:"pages"`
+			Edition  string `json:"edition"`
+			Year     string `json:"year"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		}
+		// Check for duplicates (id, title, author, year, pages)
+		filter := bson.M{
+			"ID": req.ID,
+			"BookName": req.Title,
+			"BookAuthor": req.Author,
+			"BookYear": req.Year,
+			"BookPages": req.Pages,
+		}
+		count, err := coll.CountDocuments(context.TODO(), filter)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db error"})
+		}
+		if count > 0 {
+			return c.JSON(http.StatusConflict, map[string]string{"error": "duplicate entry"})
+		}
+		book := BookStore{
+			ID: req.ID,
+			BookName: req.Title,
+			BookAuthor: req.Author,
+			BookPages: req.Pages,
+			BookEdition: req.Edition,
+			BookYear: req.Year,
+		}
+		_, err = coll.InsertOne(context.TODO(), book)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db error"})
+		}
+		return c.JSON(http.StatusCreated, map[string]string{"message": "book created"})
+	})
+
+	// PUT /api/books/:id
+	e.PUT("/api/books/:id", func(c echo.Context) error {
+		id := c.Param("id")
+		var req struct {
+			Title    string `json:"title"`
+			Author   string `json:"author"`
+			Pages    string `json:"pages"`
+			Edition  string `json:"edition"`
+			Year     string `json:"year"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		}
+		update := bson.M{}
+		if req.Title != "" {
+			update["BookName"] = req.Title
+		}
+		if req.Author != "" {
+			update["BookAuthor"] = req.Author
+		}
+		if req.Pages != "" {
+			update["BookPages"] = req.Pages
+		}
+		if req.Edition != "" {
+			update["BookEdition"] = req.Edition
+		}
+		if req.Year != "" {
+			update["BookYear"] = req.Year
+		}
+		if len(update) == 0 {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no fields to update"})
+		}
+		res, err := coll.UpdateOne(context.TODO(), bson.M{"ID": id}, bson.M{"$set": update})
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db error"})
+		}
+		if res.MatchedCount == 0 {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "book not found"})
+		}
+		return c.JSON(http.StatusOK, map[string]string{"message": "book updated"})
+	})
+
+	// DELETE /api/books/:id
+	e.DELETE("/api/books/:id", func(c echo.Context) error {
+		id := c.Param("id")
+		res, err := coll.DeleteOne(context.TODO(), bson.M{"ID": id})
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db error"})
+		}
+		if res.DeletedCount == 0 {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "book not found"})
+		}
+		return c.JSON(http.StatusOK, map[string]string{"message": "book deleted"})
 	})
 
 	// We start the server and bind it to port 3030. For future references, this
