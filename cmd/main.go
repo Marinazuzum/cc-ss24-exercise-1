@@ -72,42 +72,23 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, ctx echo.C
 // database
 // More on what bson means: https://www.mongodb.com/docs/drivers/go/current/fundamentals/bson/
 func prepareDatabase(client *mongo.Client, dbName string, collecName string) (*mongo.Collection, error) {
-    db := client.Database(dbName)
+	db := client.Database(dbName)
 
-    names, err := db.ListCollectionNames(context.TODO(), bson.D{{}})
-    if err != nil {
-        return nil, err
-    }
-    if !slices.Contains(names, collecName) {
-        cmd := bson.D{{"create", collecName}}
-        var result bson.M
-        if err = db.RunCommand(context.TODO(), cmd).Decode(&result); err != nil {
-            log.Fatal(err)
-            return nil, err
-        }
-    }
+	names, err := db.ListCollectionNames(context.TODO(), bson.D{{}})
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains(names, collecName) {
+		cmd := bson.D{{"create", collecName}}
+		var result bson.M
+		if err = db.RunCommand(context.TODO(), cmd).Decode(&result); err != nil {
+			log.Fatal(err)
+			return nil, err
+		}
+	}
 
-    coll := db.Collection(collecName)
-
-    // Create a unique compound index on ID, BookName, BookAuthor, BookYear, BookPages
-    indexModel := mongo.IndexModel{
-        Keys: bson.D{
-            {Key: "ID", Value: 1},
-            {Key: "BookName", Value: 1},
-            {Key: "BookAuthor", Value: 1},
-            {Key: "BookYear", Value: 1},
-            {Key: "BookPages", Value: 1},
-        },
-        Options: options.Index().SetUnique(true),
-    }
-
-    _, err = coll.Indexes().CreateOne(context.TODO(), indexModel)
-    if err != nil {
-        // Handle error if index creation fails, e.g., if there are existing duplicates
-        log.Printf("Warning: Could not create unique index. This might be due to existing duplicates: %v", err)
-    }
-
-    return coll, nil
+	coll := db.Collection(collecName)
+	return coll, nil
 }
 
 // Here we prepare some fictional data and we insert it into the database
