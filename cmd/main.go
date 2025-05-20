@@ -328,6 +328,26 @@ e.GET("/years", func(c echo.Context) error {
 		return c.JSON(http.StatusCreated, map[string]string{"message": "book created"})
 	})
 
+		// GET /api/books/:id
+	e.GET("/api/books/:id", func(c echo.Context) error {
+		id := c.Param("id")
+		var result BookStore
+		err := coll.FindOne(context.TODO(), bson.M{"ID": id}).Decode(&result)
+		if err != nil {
+			// Return empty object and 204 if not found
+			return c.NoContent(http.StatusNoContent)
+		}
+		// Return the book as JSON
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"id": result.ID,
+			"title": result.BookName,
+			"author": result.BookAuthor,
+			"pages": result.BookPages,
+			"edition": result.BookEdition,
+			"year": result.BookYear,
+		})
+	})
+
 	// PUT /api/books/:id
 	e.PUT("/api/books/:id", func(c echo.Context) error {
 		id := c.Param("id")
@@ -365,7 +385,7 @@ e.GET("/years", func(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db error"})
 		}
 		if res.MatchedCount == 0 {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "book not found"})
+			return c.NoContent(http.StatusNoContent)
 		}
 		return c.JSON(http.StatusOK, map[string]string{"message": "book updated"})
 	})
@@ -378,7 +398,7 @@ e.GET("/years", func(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db error"})
 		}
 		if res.DeletedCount == 0 {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "book not found"})
+			return c.NoContent(http.StatusNoContent)
 		}
 		return c.JSON(http.StatusOK, map[string]string{"message": "book deleted"})
 	})
