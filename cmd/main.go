@@ -88,6 +88,25 @@ func prepareDatabase(client *mongo.Client, dbName string, collecName string) (*m
 	}
 
 	coll := db.Collection(collecName)
+
+	// Create a unique compound index on ID, BookName, and BookYear
+	indexModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "ID", Value: 1},
+			{Key: "BookName", Value: 1},
+			{Key: "BookAuthor", Value: 1},
+			{Key: "BookYear", Value: 1},
+			{Key: "BookPages", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
+	}
+
+	_, err = coll.Indexes().CreateOne(context.TODO(), indexModel)
+	if err != nil {
+		log.Printf("Could not create index: %v", err)
+		return nil, err
+	}
+
 	return coll, nil
 }
 
