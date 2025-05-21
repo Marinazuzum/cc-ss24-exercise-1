@@ -319,19 +319,12 @@ e.GET("/years", func(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		}
 		// Check for duplicates (id, title, author, year, pages)
-		// filter := bson.M{
-		// 	"ID": req.ID,
-		// 	"BookName": req.Title,
-		// 	"BookAuthor": req.Author,
-		// 	"BookYear": req.Year,
-		// 	"BookPages": req.Pages,
-		// }
-		filter := bson.M{
-			"id": req.ID,
-			"title": req.Title,
-			"author": req.Author,
-			"year": req.Year,
-			"pages": req.Pages,
+		filter := bson.D{
+			"ID": req.ID,
+			"BookName": req.Title,
+			"BookAuthor": req.Author,
+			"BookYear": req.Year,
+			"BookPages": req.Pages,
 		}
 		fmt.Printf("[DIAG] Insert filter: %+v\n", filter)
 		count, err := coll.CountDocuments(context.TODO(), filter)
