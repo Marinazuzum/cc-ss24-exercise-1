@@ -89,23 +89,23 @@ func prepareDatabase(client *mongo.Client, dbName string, collecName string) (*m
 
 	coll := db.Collection(collecName)
 
-	// Create a unique compound index on ID, BookName, and BookYear
-	indexModel := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "ID", Value: 1},
-			{Key: "BookName", Value: 1},
-			{Key: "BookAuthor", Value: 1},
-			{Key: "BookYear", Value: 1},
-			{Key: "BookPages", Value: 1},
-		},
-		Options: options.Index().SetUnique(true),
-	}
+	// // Create a unique compound index on ID, BookName, and BookYear
+	// indexModel := mongo.IndexModel{
+	// 	Keys: bson.D{
+	// 		{Key: "ID", Value: 1},
+	// 		{Key: "BookName", Value: 1},
+	// 		{Key: "BookAuthor", Value: 1},
+	// 		{Key: "BookYear", Value: 1},
+	// 		{Key: "BookPages", Value: 1},
+	// 	},
+	// 	Options: options.Index().SetUnique(true),
+	// }
 
-	_, err = coll.Indexes().CreateOne(context.TODO(), indexModel)
-	if err != nil {
-		log.Printf("Could not create index: %v", err)
-		return nil, err
-	}
+	// _, err = coll.Indexes().CreateOne(context.TODO(), indexModel)
+	// if err != nil {
+	// 	log.Printf("Could not create index: %v", err)
+	// 	return nil, err
+	// }
 
 	return coll, nil
 }
@@ -326,11 +326,15 @@ e.GET("/years", func(c echo.Context) error {
 			"BookYear": req.Year,
 			"BookPages": req.Pages,
 		}
+		fmt.Printf("[DIAG] Insert filter: %+v\n", filter)
 		count, err := coll.CountDocuments(context.TODO(), filter)
 		if err != nil {
+			fmt.Printf("[DIAG] CountDocuments error: %v\n", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db error"})
 		}
+		fmt.Printf("[DIAG] Duplicate count: %d\n", count)
 		if count > 0 {
+			fmt.Printf("[DIAG] Duplicate detected for: %+v\n", filter)
 			return c.JSON(http.StatusConflict, map[string]string{"error": "duplicate entry"})
 		}
 		book := BookStore{
