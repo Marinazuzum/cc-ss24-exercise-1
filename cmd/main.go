@@ -320,7 +320,7 @@ e.GET("/years", func(c echo.Context) error {
 		}
 		// Check for duplicates (id, title, author, year, pages)
 		filter := bson.D{
-			{"ID": req.ID},
+			{"ID", req.ID},
 			{"BookName", req.Title},
 			{"BookAuthor", req.Author},
 			{"BookYear", req.Year},
