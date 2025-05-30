@@ -12,5 +12,5 @@ WORKDIR /app
 COPY --from=builder /app/app .
 COPY views/ ./views/
 COPY css/ ./css/
-EXPOSE 3030
+EXPOSE 3000
 CMD ["./app"]
