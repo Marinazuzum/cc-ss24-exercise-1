@@ -189,8 +189,8 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Use MONGODB_URI from environment if set, otherwise default to localhost
-	uri := os.Getenv("MONGODB_URI")
+	// Use DATABASE_URI from environment if set, otherwise default to localhost
+	uri := os.Getenv("DATABASE_URI")
 	if uri == "" {
 		uri = "mongodb://localhost:27017/exercise-1?authSource=admin"
 	}
