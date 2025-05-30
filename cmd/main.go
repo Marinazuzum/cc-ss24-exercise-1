@@ -24,12 +24,12 @@ import (
 // More on these "tags" like `bson:"_id,omitempty"`: https://go.dev/wiki/Well-known-struct-tags
 type BookStore struct {
 	MongoID     primitive.ObjectID `bson:"_id,omitempty"`
-	ID          string
-	BookName    string
-	BookAuthor  string
-	BookEdition string
-	BookPages   string
-	BookYear    string
+	ID          string             `bson:"ID"`
+	BookName    string             `bson:"BookName"`
+	BookAuthor  string             `bson:"BookAuthor"`
+	BookEdition string             `bson:"BookEdition"`
+	BookPages   string             `bson:"BookPages"`
+	BookYear    string             `bson:"BookYear"`
 }
 
 // Wraps the "Template" struct to associate a necessary method
@@ -78,6 +78,7 @@ func prepareDatabase(client *mongo.Client, dbName string, collecName string) (*m
 	if err != nil {
 		return nil, err
 	}
+	// Check if the collection already exists
 	if !slices.Contains(names, collecName) {
 		cmd := bson.D{{"create", collecName}}
 		var result bson.M
@@ -88,24 +89,6 @@ func prepareDatabase(client *mongo.Client, dbName string, collecName string) (*m
 	}
 
 	coll := db.Collection(collecName)
-
-	// // Create a unique compound index on ID, BookName, and BookYear
-	// indexModel := mongo.IndexModel{
-	// 	Keys: bson.D{
-	// 		{Key: "ID", Value: 1},
-	// 		{Key: "BookName", Value: 1},
-	// 		{Key: "BookAuthor", Value: 1},
-	// 		{Key: "BookYear", Value: 1},
-	// 		{Key: "BookPages", Value: 1},
-	// 	},
-	// 	Options: options.Index().SetUnique(true),
-	// }
-
-	// _, err = coll.Indexes().CreateOne(context.TODO(), indexModel)
-	// if err != nil {
-	// 	log.Printf("Could not create index: %v", err)
-	// 	return nil, err
-	// }
 
 	return coll, nil
 }
@@ -209,7 +192,7 @@ func main() {
 	// Use MONGODB_URI from environment if set, otherwise default to localhost
 	uri := os.Getenv("MONGODB_URI")
 	if uri == "" {
-		uri = "mongodb://localhost:27017"
+		uri = "mongodb://localhost:27017/exercise-1?authSource=admin"
 	}
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 
@@ -252,43 +235,47 @@ func main() {
 		return c.Render(200, "book-table", books)
 	})
 
-e.GET("/authors", func(c echo.Context) error {
-	// Fetch all books and extract unique authors
-	books := findAllBooks(coll)
-	authorSet := make(map[string]struct{})
-	for _, book := range books {
-		if author, ok := book["BookAuthor"].(string); ok {
-			authorSet[author] = struct{}{}
-		}
-	}
-	var authors []string
-	for author := range authorSet {
-		authors = append(authors, author)
-	}
-	data := struct {
-		Authors []string
-	}{Authors: authors}
-	return c.Render(http.StatusOK, "authors.html", data)
-})
+	e.GET("/authors", func(c echo.Context) error {
+		books := findAllBooks(coll)
 
-e.GET("/years", func(c echo.Context) error {
-	// Fetch all books and extract unique years
-	books := findAllBooks(coll)
-	yearSet := make(map[string]struct{})
-	for _, book := range books {
-		if year, ok := book["BookYear"].(string); ok {
-			yearSet[year] = struct{}{}
+		// Use a set to collect unique authors
+		authorSet := make(map[string]struct{}, len(books))
+		for _, book := range books {
+			if author, ok := book["author"].(string); ok && author != "" {
+				authorSet[author] = struct{}{}
+			}
 		}
-	}
-	var years []string
-	for year := range yearSet {
-		years = append(years, year)
-	}
-	data := struct {
-		Years []string
-	}{Years: years}
-	return c.Render(http.StatusOK, "years.html", data)
-})
+
+		// Convert the set to a slice
+		authors := make([]string, 0, len(authorSet))
+		for author := range authorSet {
+			authors = append(authors, author)
+		}
+
+		// Render the template with the authors list
+		return c.Render(http.StatusOK, "authors.html", map[string]interface{}{
+			"Authors": authors,
+		})
+	})
+
+	e.GET("/years", func(c echo.Context) error {
+		// Fetch all books and extract unique years
+		books := findAllBooks(coll)
+		yearSet := make(map[string]struct{})
+		for _, book := range books {
+			if year, ok := book["year"].(string); ok {
+				yearSet[year] = struct{}{}
+			}
+		}
+		var years []string
+		for year := range yearSet {
+			years = append(years, year)
+		}
+		data := struct {
+			Years []string
+		}{Years: years}
+		return c.Render(http.StatusOK, "years.html", data)
+	})
 
 	e.GET("/search", func(c echo.Context) error {
 		return c.Render(200, "search-bar", nil)
@@ -297,7 +284,6 @@ e.GET("/years", func(c echo.Context) error {
 	e.GET("/create", func(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	})
-
 
 	// GET /api/books (already implemented above)
 	e.GET("/api/books", func(c echo.Context) error {
@@ -308,12 +294,12 @@ e.GET("/years", func(c echo.Context) error {
 	// POST /api/books
 	e.POST("/api/books", func(c echo.Context) error {
 		var req struct {
-			ID       string `json:"id"`
-			Title    string `json:"title"`
-			Author   string `json:"author"`
-			Pages    string `json:"pages"`
-			Edition  string `json:"edition"`
-			Year     string `json:"year"`
+			ID      string `json:"id"`
+			Title   string `json:"title"`
+			Author  string `json:"author"`
+			Pages   string `json:"pages"`
+			Edition string `json:"edition"`
+			Year    string `json:"year"`
 		}
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -326,24 +312,20 @@ e.GET("/years", func(c echo.Context) error {
 			{"BookYear", req.Year},
 			{"BookPages", req.Pages},
 		}
-		fmt.Printf("[DIAG] Insert filter: %+v\n", filter)
 		count, err := coll.CountDocuments(context.TODO(), filter)
 		if err != nil {
-			fmt.Printf("[DIAG] CountDocuments error: %v\n", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db error"})
 		}
-		fmt.Printf("[DIAG] Duplicate count: %d\n", count)
 		if count > 0 {
-			fmt.Printf("[DIAG] Duplicate detected for: %+v\n", filter)
 			return c.JSON(http.StatusConflict, map[string]string{"error": "duplicate entry"})
 		}
 		book := BookStore{
-			ID: req.ID,
-			BookName: req.Title,
-			BookAuthor: req.Author,
-			BookPages: req.Pages,
+			ID:          req.ID,
+			BookName:    req.Title,
+			BookAuthor:  req.Author,
+			BookPages:   req.Pages,
 			BookEdition: req.Edition,
-			BookYear: req.Year,
+			BookYear:    req.Year,
 		}
 		_, err = coll.InsertOne(context.TODO(), book)
 		if err != nil {
@@ -352,7 +334,7 @@ e.GET("/years", func(c echo.Context) error {
 		return c.JSON(http.StatusCreated, map[string]string{"message": "book created"})
 	})
 
-		// GET /api/books/:id
+	// GET /api/books/:id
 	e.GET("/api/books/:id", func(c echo.Context) error {
 		id := c.Param("id")
 		var result BookStore
@@ -363,12 +345,12 @@ e.GET("/years", func(c echo.Context) error {
 		}
 		// Return the book as JSON
 		return c.JSON(http.StatusOK, map[string]interface{}{
-			"id": result.ID,
-			"title": result.BookName,
-			"author": result.BookAuthor,
-			"pages": result.BookPages,
+			"id":      result.ID,
+			"title":   result.BookName,
+			"author":  result.BookAuthor,
+			"pages":   result.BookPages,
 			"edition": result.BookEdition,
-			"year": result.BookYear,
+			"year":    result.BookYear,
 		})
 	})
 
@@ -376,11 +358,11 @@ e.GET("/years", func(c echo.Context) error {
 	e.PUT("/api/books/:id", func(c echo.Context) error {
 		id := c.Param("id")
 		var req struct {
-			Title    string `json:"title"`
-			Author   string `json:"author"`
-			Pages    string `json:"pages"`
-			Edition  string `json:"edition"`
-			Year     string `json:"year"`
+			Title   string `json:"title"`
+			Author  string `json:"author"`
+			Pages   string `json:"pages"`
+			Edition string `json:"edition"`
+			Year    string `json:"year"`
 		}
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -433,5 +415,5 @@ e.GET("/years", func(c echo.Context) error {
 	// they might differ.
 	// In the submission website for this exercise, you will have to provide the internet-reachable
 	// endpoint: http://<host>:<external-port>
-	e.Logger.Fatal(e.Start(":3030"))
+	e.Logger.Fatal(e.Start(":3000"))
 }
